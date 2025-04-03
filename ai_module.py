@@ -232,6 +232,7 @@
 
 import json
 import re
+from fastapi import HTTPException
 import newspaper
 import requests
 from google import genai
@@ -312,6 +313,15 @@ async def generate_response(db: AsyncSession, session_id: str, query: str, resul
 
 async def generate_ai_response(db: AsyncSession, session_id: str, query: str):
     """Generate AI response while handling database storage and web search integration."""
+    # Fetch the chat session to get user_id
+    session_result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
+    chat_session = session_result.scalars().first()
+
+    if not chat_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    user_id = chat_session.user_id  # Extract user_id from the session
+
     related_queries = generate_related_queries(query, await extract_relevant_context(db, session_id, query))
     all_results = []
 
@@ -326,9 +336,9 @@ async def generate_ai_response(db: AsyncSession, session_id: str, query: str):
 
     answer = await generate_response(db, session_id, query, all_results)
 
-    # Store user query and AI response in the database
-    chat_message_user = ChatMessage(session_id=session_id, role="user", message=query)
-    chat_message_ai = ChatMessage(session_id=session_id, role="ai", message=answer)
+    # Store user query and AI response in the database with user_id
+    chat_message_user = ChatMessage(session_id=session_id, user_id=user_id, role="user", message=query)
+    chat_message_ai = ChatMessage(session_id=session_id, user_id=user_id, role="ai", message=answer)
 
     db.add(chat_message_user)
     db.add(chat_message_ai)
@@ -339,4 +349,3 @@ async def generate_ai_response(db: AsyncSession, session_id: str, query: str):
         "answer": answer,
         "sources": [{"title": res["title"], "url": res["url"]} for res in all_results],
     }
-

@@ -15,6 +15,8 @@ BRAVE_API_KEY = os.getenv("BRAVE_API")
 
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 
 DATABASE_URL = os.getenv("DATABASE_URL")

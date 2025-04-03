@@ -1,25 +1,3 @@
-# from fastapi import FastAPI, HTTPException
-# from pydantic import BaseModel
-# from ai_module import generate_ai_response  # Import AI logic from a separate module
-
-# # Initialize FastAPI
-# app = FastAPI()
-
-# class QueryRequest(BaseModel):
-#     query: str
-
-# @app.post("/ask")
-# def ask(request: QueryRequest):
-#     query = request.query.strip()
-#     if not query:
-#         raise HTTPException(status_code=400, detail="Query cannot be empty.")
-    
-#     response_data = generate_ai_response(query)
-#     if not response_data:
-#         raise HTTPException(status_code=404, detail="No response generated.")
-    
-#     return response_data
-
 from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException
 import pytz
@@ -27,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from models import ChatSession, ChatMessage
 from pydantic import BaseModel, EmailStr
+from ai_module import generate_ai_response
 from supabase_client import supabase
+from auth import get_current_user
 from models import UserProfile
 from database import get_db
 import uuid
@@ -112,35 +92,43 @@ async def login_user(request: SignInRequest):
 
 # -------------------- CHAT SESSION MANAGEMENT --------------------
 
-@app.post("/start_session/{user_id}")
-async def start_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    """Create a new chat session."""
+@app.post("/start_session")
+async def start_chat_session(
+    db: AsyncSession = Depends(get_db), 
+    user_id: uuid.UUID = Depends(get_current_user)  # Ensuring the user is authenticated
+):
+    """Create a new chat session for a logged-in user."""
     session = ChatSession(user_id=user_id)
     db.add(session)
     await db.commit()
     await db.refresh(session)
     return {"session_id": session.id}
 
+
 @app.post("/send_message/{session_id}")
-async def send_message(session_id: uuid.UUID, user_id: uuid.UUID, message: str, role: str, db: AsyncSession = Depends(get_db)):
-    """Store a chat message and update relevant context."""
-    
-    # Check if session exists
+async def send_message(
+    session_id: uuid.UUID,
+    message: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user)
+):
+    """User sends a message, AI responds, and both are stored in the database."""
+
+    # Verify session exists
     session_result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
     chat_session = session_result.scalars().first()
     if not chat_session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Store the message
-    chat_message = ChatMessage(session_id=session_id, user_id=user_id, role=role, message=message)
-    db.add(chat_message)
-    
-    # Update the relevant context only if the message is from AI
-    if role == "ai":
-        chat_session.context = (chat_session.context or "") + f"User asked: {message}\nAI replied: {message}\n"
-    
-    await db.commit()
-    return {"message_id": chat_message.id, "updated_context": chat_session.context}
+    # Generate AI response
+    ai_response = await generate_ai_response(db, session_id, message)
+
+    return {
+        "session_id": session_id,
+        "user_message": message,
+        "ai_response": ai_response["answer"],
+        "sources": ai_response["sources"]
+    }
 
 @app.get("/get_chat/{session_id}")
 async def get_chat_history(session_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
@@ -149,3 +137,11 @@ async def get_chat_history(session_id: uuid.UUID, db: AsyncSession = Depends(get
     messages = session_result.scalars().all()
     
     return [{"role": msg.role, "message": msg.message, "timestamp": msg.created_at} for msg in messages]
+
+@app.get("/get_sessions/{user_id}")
+async def get_user_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Retrieve all chat sessions for a user."""
+    session_result = await db.execute(select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.created_at.desc()))
+    sessions = session_result.scalars().all()
+    
+    return [{"session_id": s.id, "created_at": s.created_at} for s in sessions]
