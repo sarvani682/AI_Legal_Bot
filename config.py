@@ -13,4 +13,10 @@ MODEL_NAME = "gemini-2.0-flash"
 
 BRAVE_API_KEY = os.getenv("BRAVE_API")
 
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 
