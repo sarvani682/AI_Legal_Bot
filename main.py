@@ -11,10 +11,17 @@ from auth import get_current_user
 from models import UserProfile
 from database import get_db
 import uuid
-
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins; change this to frontend URL in production
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 # -------------------- AUTHENTICATION ROUTES --------------------
 
 class SignUpRequest(BaseModel):
