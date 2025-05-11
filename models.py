@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, func
+from sqlalchemy import JSON, Column, String, Text, ForeignKey, TIMESTAMP, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -31,7 +31,9 @@ class ChatMessage(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("user_profiles.id"), nullable=False)
     role = Column(String, nullable=False)  # "user" or "ai"
     message = Column(Text, nullable=False)
+    sources = Column(JSON, nullable=True) 
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
+
 
     session = relationship("ChatSession")
     user = relationship("UserProfile")
